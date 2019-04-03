@@ -30,7 +30,7 @@ import traceback
 
 import matchobserver
 import streamconnector
-import videohandler
+# import videohandler
 
 PREMATCH_BUFFER_CHUNKS = 2048
 SPLIT_AT_TIME = 60 * 8
@@ -141,11 +141,20 @@ class MatchRecorderStreamConnector(streamconnector.StreamConnector):
         self._upload_in_background(ready_path)
 
     def _upload_in_background(self, ready_path):
-        multiprocessing.Process(
-                target=videohandler.upload_to_streamable_and_post_to_twitter,
-                args=(ready_path.split('---')[1], ready_path, self._twitter_user)
-        ).start()
+        console.log('upload in bg {}'.format(ready_path));
+        # multiprocessing.Process(
+        #         target=videohandler.upload_to_streamable_and_post_to_twitter,
+        #         args=(ready_path.split('---')[1], ready_path, self._twitter_user)
+        # ).start()
 
 if __name__ == '__main__':
-    MatchRecorderStreamConnector(os.environ['EVENT_ID'], os.environ['TWITCH_ID'],
-                                 os.environ['TWITTER_USER'], os.environ['GAME_ID']).run()
+    EVENT_ID        = '2019nhsnh'
+    TWITCH_ID       = 'videos/396390430'
+    TWITTER_USER    = None
+    GAME_ID         = 'FRC-2017'
+    MatchRecorderStreamConnector(
+        EVENT_ID,
+        TWITCH_ID,
+        TWITTER_USER,
+        GAME_ID
+    ).run()

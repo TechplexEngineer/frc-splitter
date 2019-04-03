@@ -43,11 +43,12 @@ MATCH_END_TIMEOUT = 60
 
 VIDEO_CHANNELS = 3
 
-VIDEO_RESOLUTION_RE = re.compile('rgb24, ([0-9]+)x([0-9]+)[, ]')
+VIDEO_RESOLUTION_RE = re.compile('(?:rgb|bgr)24, ([0-9]+)x([0-9]+)[, ]')
 
 def background_process(event_id, vision_core_class, info_stream, frame_stream, match_id_queue):
     match_id = None
     match_id_counter = collections.Counter()
+    frame_counter = 0
 
     change_timestamp = -1
     end_timestamp = -1
@@ -55,7 +56,7 @@ def background_process(event_id, vision_core_class, info_stream, frame_stream, m
     video_width = None
     video_height = None
 
-    while False:
+    while True:
         info_line = info_stream.readline().decode('utf-8')
         if len(info_line) == 0:
             break
@@ -68,8 +69,8 @@ def background_process(event_id, vision_core_class, info_stream, frame_stream, m
             video_height = int(match.group(2))
             break
 
-    video_width=1920
-    video_height=1080
+    # video_width=1920
+    # video_height=1080
 
     if video_width is None:
         raise Exception('Failed to identify video resolution')
@@ -83,19 +84,21 @@ def background_process(event_id, vision_core_class, info_stream, frame_stream, m
 
     while True:
         try:
-            print('reading frame data')
+            # print('reading frame data')
             data = frame_reader.read(frame_size)
             if len(data) < frame_size:
                 break
 
-            print('decoding frame data')
+            # print('decoding frame data')
             frame = PIL.Image.frombuffer('RGB', (video_width, video_height), data, 'raw', 'RGB',
                                          0, 1)
 
-            print('start processing frame')
-            process_start_time = time.time()
+            print('start processing frame {}'.format(frame_counter))
+            frame_counter += 1
+
+            # process_start_time = time.time()
             new_match_id, match_info = vision_core.process_frame(frame)
-            print('frame_process_time = {}'.format(time.time() - process_start_time))
+            # print('frame_process_time = {}'.format(time.time() - process_start_time))
 
             if new_match_id is None:
                 if match_id is not None:
@@ -124,10 +127,11 @@ class MatchObserver:
         self._event_id = event_id
         self._frame_extractor = None
 
-        if game_id == 'FTC-2017':
-            import matchobserver.ftc2017
-            self._vision_core_class = ftc2017.FTC2017VisionCore
-        elif game_id == 'FRC-2017':
+        # if game_id == 'FTC-2017':
+        #     import matchobserver.ftc2017
+        #     self._vision_core_class = ftc2017.FTC2017VisionCore
+        # el
+        if game_id == 'FRC-2017':
             import matchobserver.frc2017
             self._vision_core_class = frc2017.FRC2017VisionCore
         else:
@@ -139,7 +143,7 @@ class MatchObserver:
         self._frame_extractor = subprocess.Popen(FFMPEG_COMMAND,
                                                  stdin=subprocess.PIPE,
                                                  stdout=subprocess.PIPE,
-                                                 #stderr=subprocess.PIPE,
+                                                 stderr=subprocess.PIPE,
                                                  preexec_fn=os.setpgrp)
 
         multiprocessing.Process(

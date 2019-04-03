@@ -58,11 +58,12 @@ class StreamConnector:
             try:
                 self.on_connecting()
 
-                r = requests.get(TWITCH_ONLINE_ENDPOINT.format(self.twitch_id))
-                r.raise_for_status()
-                if '"stream":null,' in r.text:
-                    time.sleep(RECONNECT_OFFLINE_DELAY)
-                    continue
+                if not self.twitch_id.startswith('videos/'):
+                    r = requests.get(TWITCH_ONLINE_ENDPOINT.format(self.twitch_id))
+                    r.raise_for_status()
+                    if '"stream":null,' in r.text:
+                        time.sleep(RECONNECT_OFFLINE_DELAY)
+                        continue
 
                 streams = streamlink.streams(twitch_url)
                 if STREAM_QUALITY not in streams:

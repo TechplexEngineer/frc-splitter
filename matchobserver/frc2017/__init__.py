@@ -31,20 +31,29 @@ import cv2
 import PIL
 import PIL.ImageEnhance
 import PIL.ImageOps
+import PIL.ImageDraw
 import pytesseract
 
+# The below constants use this size as a reference.
+# If the video is different a scale is applied in the constructor
 BASE_WIDTH = 1280
 BASE_HEIGHT = 720
 
-MATCH_LABEL_RECTS = [(164, 555, 625, 596)]
+MATCH_LABEL_RECTS = [
+    ((160, 555, 625, 610), 'game'), #second arg is type
+    ((75,  53,  625, 110), 'outside')
+]
+FRAME_RESULTS_RECTS = [(640, 51, 1030, 116)]
 
 FMS_BASE_X = BASE_WIDTH / 2
 FMS_BASE_Y = 555
 
 TIMEOUT_RECT = (543-FMS_BASE_X, 644-FMS_BASE_Y, 43+543-FMS_BASE_X, 52+644-FMS_BASE_Y)
-TIMEOUT_COLOR = (217, 174, 125)
+TIMEOUT_COLOR = (217, 174, 125) #orange
+TIMEOUT_COLOR = (0xCD, 0xCC, 0xCD) #grey
 TIMEOUT_THRESHOLD = 10
 
+# Needs to be adjusted for match under review icon
 LEFT_COLOR_RECT = (623-FMS_BASE_X, 647-FMS_BASE_Y, 12+623-FMS_BASE_X, 55+647-FMS_BASE_Y)
 RED_COLOR = (184, 39, 2)
 BLUE_COLOR = (59, 133, 220)
@@ -75,11 +84,9 @@ MATCH_ENDED_THRESHOLD = 100
 AUTON_TIME = 15
 TELEOP_TIME = 135
 
-SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
-NUMBER_TESSERACT_CONFIG = '-psm 6 digits'
-MATCH_LABEL_TESSERACT_CONFIG = \
-    '-psm 7 --tessdata-dir {}/matchlabel_tessdata matchlabel'.format(SCRIPT_DIR)
+
+SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
 FIRST_LOGO_SCAN_RATIO = 1 / 4
 FIRST_LOGO_TEMPLATE_PATH = '{}/first-logo.bmp'.format(SCRIPT_DIR)
@@ -90,82 +97,125 @@ FIRST_LOGO_MIN_MATCH_COUNT = 10
 MATCH_LABEL_LEFT_PADDING = 15
 MATCH_LABEL_RIGHT_PADDING = 15
 
+# pagesegmode values are: (--psm)
+#   0 = Orientation and script detection (OSD) only.
+#   1 = Automatic page segmentation with OSD.
+#   2 = Automatic page segmentation, but no OSD, or OCR
+#   3 = Fully automatic page segmentation, but no OSD. (Default)
+#   4 = Assume a single column of text of variable sizes.
+#   5 = Assume a single uniform block of vertically aligned text.
+#   6 = Assume a single uniform block of text.
+#   7 = Treat the image as a single text line.
+#   8 = Treat the image as a single word.
+#   9 = Treat the image as a single word in a circle.
+#   10 = Treat the image as a single character.
+NUMBER_TESSERACT_CONFIG = '--psm 6 digits'
+MATCH_LABEL_TESSERACT_CONFIG = \
+    '-psm 7 --tessdata-dir {}/matchlabel_tessdata matchlabel'.format(SCRIPT_DIR)
+
+
+
+# regex for anything that might be a number comming out of OCR
 NUMBER_PATTERN = '0-9ZSO'
 def np(r):
     return r.replace('@', NUMBER_PATTERN)
 
+# Used to match against error prone OCR text
 MATCH_ID_FORMATS = [
-    (re.compile(np(r'^Qualif[^@]+([@\s]+)of')), '#Qualification Match {}'),
+    (re.compile(np(r'^Qualif[^@]+([@\s]+)of')), 'Qualification Match'),
 
-    (re.compile(np(r'^Quart[^T]+Tieb[^@]+([@\s]+)$')), '#Quarterfinal Tiebreaker {}'),
-    (re.compile(np(r'^Quart[^@]+([@\s]+)of')), '#Quarterfinal Match {}'),
-    (re.compile(np(r'^Quart[^@]+([@\s]+)$')), '#Quarterfinal Match {}'),
+    (re.compile(np(r'^Quart[^T]+Tieb[^@]+([@\s]+)$')), 'Quarterfinal Tiebreaker'),
+    (re.compile(np(r'^Quart[^@]+([@\s]+)of')), 'Quarterfinal Match'),
+    (re.compile(np(r'^Quart[^@]+([@\s]+)$')), 'Quarterfinal Match'),
 
-    (re.compile(np(r'^Semi[^T]+Tieb[^@]+([@\s]+)')), '#Semifinal Tiebreaker {}'),
-    (re.compile(np(r'^Semi[^@]+([@\s]+)of')), '#Semifinal Match {}'),
-    (re.compile(np(r'^Semi[^@]+([@\s]+)$')), '#Semifinal Match {}'),
+    (re.compile(np(r'^Semi[^T]+Tieb[^@]+([@\s]+)')), 'Semifinal Tiebreaker'),
+    (re.compile(np(r'^Semi[^@]+([@\s]+)of')), 'Semifinal Match'),
+    (re.compile(np(r'^Semi[^@]+([@\s]+)$')), 'Semifinal Match'),
 
-    (re.compile(np(r'^Fin[^T]+Tieb[^@]+([@\s]+)')), '#Final Tiebreaker {}'),
-    (re.compile(np(r'^Fin[^@]+([@\s]+)of')), '#Final Match {}'),
-    (re.compile(np(r'^Fin[^@]+([@\s]+)$')), '#Final Match {}'),
+    (re.compile(np(r'^Fin[^T]+Tieb[^@]+([@\s]+)')), 'Final Tiebreaker'),
+    (re.compile(np(r'^Fin[^@]+([@\s]+)of')), 'Final Match'),
+    (re.compile(np(r'^Fin[^@]+([@\s]+)$')), 'Final Match'),
 
-    (re.compile(np(r'^Practice[^@]+([@\s]+)of')), '#Practice Match {}'),
+    (re.compile(np(r'^Practice[^@]+([@\s]+)of')), 'Practice Match'),
 
-    (re.compile(np(r'^Einst[^F]+Fin[^T]+Tieb[^@]+([@\s]+)')), '#Final Tiebreaker {}'),
-    (re.compile(np(r'^Einst[^F]+Fin[^@]+([@\s]+)of')), '#Final Match {}'),
-    (re.compile(np(r'^Einst[^F]+Fin[^@]+([@\s]+)$')), '#Final Match {}'),
+    (re.compile(np(r'^Einst[^F]+Fin[^T]+Tieb[^@]+([@\s]+)')), 'Final Tiebreaker'),
+    (re.compile(np(r'^Einst[^F]+Fin[^@]+([@\s]+)of')), 'Final Match'),
+    (re.compile(np(r'^Einst[^F]+Fin[^@]+([@\s]+)$')), 'Final Match'),
 
-    (re.compile(np(r'^Einst[^T]+Tieb[^@]+([@\s]+)')), '#Playoff Tiebreaker {}'),
-    (re.compile(np(r'^Einst[^@]+([@\s]+)of')), '#Playoff Match {}'),
-    (re.compile(np(r'^Einst[^@]+([@\s]+)$')), '#Playoff Match {}')
+    (re.compile(np(r'^Einst[^T]+Tieb[^@]+([@\s]+)')), 'Playoff Tiebreaker'),
+    (re.compile(np(r'^Einst[^@]+([@\s]+)of')), 'Playoff Match'),
+    (re.compile(np(r'^Einst[^@]+([@\s]+)$')), 'Playoff Match')
 ]
 
 WHITESPACE_RE = re.compile(r'\s+')
 NOT_DIGIT_RE = re.compile(r'[^0-9]')
 
+# Turns out OCR (tesseract) has some common errors. Since we expect text to
+# contain only digits we can make some replacements. Remove all whitespace
 def fix_digits(text):
-    return WHITESPACE_RE.sub('', text).replace('Z', '2').replace('S', '5').replace('O', '0')
+    return WHITESPACE_RE.sub('', text) \
+        .replace('Z', '2') \
+        .replace('S', '5') \
+        .replace('O', '0')
 
+# Remove all non-digits and cleanup OCR artifacts
 def interpret_as_number(text):
     text = NOT_DIGIT_RE.sub('', fix_digits(text))
     if len(text) == 0:
         return None
     return int(text)
 
+# Using the number config
 def read_number(img):
-    return interpret_as_number(pytesseract.image_to_string(img, config=NUMBER_TESSERACT_CONFIG))
+    out = pytesseract.image_to_string(img, config=NUMBER_TESSERACT_CONFIG)
+    return interpret_as_number(out)
 
-def read_match_id(label):
-    #return 'Test Match'
+# Use tesseract to find text in a small image. Then check if that text matches
+# any of the MATCH_ID_FORMATS to determine what type of match.
+def read_match_id(cropped_frame):
+    text = pytesseract.image_to_string(cropped_frame)
+    # print('Tesseract: ', text)
 
-    text = pytesseract.image_to_string(label)
-    print(text)
-
-    for regex, fmt in MATCH_ID_FORMATS:
+    for regex, match_type in MATCH_ID_FORMATS:
         match = regex.match(text.strip())
+        # print('match ', match is not None and match.groups())
         if match:
             match_number = fix_digits(match.group(1))
             if len(match_number) == 0:
-                return ''
+                return (None, None)
             else:
-                return fmt.format(match_number)
-    return None
+                return (match_type, match_number)
+    return (None, None)
 
+# Find the mean color in an image.
 def mean_color(img):
     return cv2.mean(numpy.array(img))[:3]
 
+# Find the distance between two colors
 def color_dist(color1, color2):
     return scipy.spatial.distance.euclidean(color1, color2)
 
-class FRC2017VisionCore:
-    def __init__(self, video_width, video_height, advanced_scraping=False):
-        self._advanced_scraping = advanced_scraping
+class VisionCore:
+    def __init__(self, video_width, video_height):
 
+        # quicker than scaling the image?
+
+        # If the frame is not BASE_WIDTH by BASE_HEIGHT we re-scale our coords
         self._x_scale = video_width / BASE_WIDTH
         self._y_scale = video_height / BASE_HEIGHT
-        self._scaled_label_rects = \
-            [(x1 * self._x_scale, y1 * self._y_scale, x2 * self._x_scale, y2 * self._y_scale)
-                for x1, y1, x2, y2 in MATCH_LABEL_RECTS]
+        self._scaled_label_rects = [(
+            (
+                x1 * self._x_scale, y1 * self._y_scale,
+                x2 * self._x_scale, y2 * self._y_scale),
+            typ)
+            for (x1, y1, x2, y2), typ in MATCH_LABEL_RECTS
+        ]
+
+        self._scaled_results_rects = [(
+            x1 * self._x_scale, y1 * self._y_scale,
+            x2 * self._x_scale, y2 * self._y_scale)
+            for x1, y1, x2, y2 in FRAME_RESULTS_RECTS
+        ]
 
         self._half_video_width = video_width / 2
         self._label_x2 = self._half_video_width - MATCH_LABEL_RIGHT_PADDING
@@ -177,16 +227,140 @@ class FRC2017VisionCore:
         self._template_keypoints, self._template_descriptors = \
             self._feature_detector.detectAndCompute(template, None)
 
-    def process_frame(self, frame):
+
+    def first(self, frame):
+        # # Search the left quarter of the image for the first logo
+        # found_rect = self._find_label_rect(frame)
+        # if found_rect is not None:
+        #     self._scaled_label_rects = [(found_rect, 'game')] + self._scaled_label_rects
+
+        colors=['red','green','blue']
+        count=0
+        tmp = frame.copy()
+        for rect, typ in self._scaled_label_rects:
+            color = colors[count]
+            count+=1
+            draw = PIL.ImageDraw.Draw(tmp)
+            # print(rect[0])
+            draw.rectangle(((rect[0], rect[1]), (rect[2], rect[3])), fill=None, outline=color)
+        tmp.show()
+
+        # Grab a section of the frame for each found rect and use tesseract
+        # to extract the match id. Stop as soon as we get some matching text
+        for rect, typ in self._scaled_label_rects:
+            newframe = frame.crop(rect)
+            # newframe.show()
+            match_type, match_number = read_match_id(newframe)
+            if match_type is not None \
+                    and len(match_type) > 0 \
+                    and match_number is not None \
+                    and len(match_number) > 0:
+                self.match_type = match_type
+                self.match_number = match_number
+                self.match_status = typ # (One of: outside, game)
+                if (self.match_status == 'game'):
+                    self.label_rect = rect
+                else:
+                    self.label_rect = None
+                break
+        if match_type is None \
+                or len(match_type) <= 0 \
+                or match_number is None \
+                or len(match_number) <= 0:
+            print('unable to get match information, will try with next frame')
+            self.match_type = None
+            self.match_number = None
+            self.match_status = None
+            self.label_rect = None
+
+
+    def getMatchTime(self, frame):
+        if self.label_rect is None:
+            return None
+        match_time_img = self._crop_rel(frame, self.label_rect, MATCH_TIME_RECT)
+        # match_time_img.show()
+
+        match_time_enhanced = \
+            PIL.ImageEnhance.Contrast(match_time_img).enhance(MATCH_TIME_CONTRAST)
+        # match_time_enhanced.show()
+
+        match_time_thresholded = \
+            match_time_enhanced \
+            .convert('L') \
+            .point(lambda x: 0 if x < MATCH_TIME_THRESHOLD else 255, '1')
+        # match_time_thresholded.show()
+
+        match_time = read_number(match_time_thresholded)
+        # print('first: ', match_time)
+        if match_time is None:
+            match_time = read_number(match_time_enhanced)
+            # print('second: ', match_time)
+        if match_time is None:
+            match_time = read_number(match_time_img)
+            # print('third: ', match_time)
+
+        return match_time
+
+    def hasMatchStarted(self, frame):
+        t = self.getMatchTime(frame)
+        if t is not None:
+            return t > 0
+        return None
+
+    def getMatchInfo(self, frame):
+        if self.match_type is not None \
+                and len(self.match_type) > 0 \
+                and self.match_number is not None \
+                and len(self.match_number) > 0:
+            return {
+                'match_type': self.match_type,
+                'match_number': self.match_number,
+            }
+        return None
+
+    def hasMatchResults(self, frame):
+        # Check if the upper right corner says results
+
+        for rect in self._scaled_results_rects:
+            newframe = frame.crop(rect)
+            # newframe.show()
+            text = pytesseract.image_to_string(newframe)
+            match = re.match(r'Match[^R]+Res', text, re.I)
+            if match:
+                return True
+        return False
+
+
+    """
+    def ____process_frame(self, frame):
         candidate_label_rects = self._scaled_label_rects
 
         found_rect = self._find_label_rect(frame)
-        print('found_rect = {}'.format(found_rect))
         if found_rect is not None:
+            print('found_rect = {}'.format(found_rect))
             candidate_label_rects = [found_rect] + candidate_label_rects
 
-        candidate_match_ids = \
-            ((read_match_id(frame.crop(rect)), rect) for rect in candidate_label_rects)
+            # colors=['red','green','blue']
+            # count=0
+            # tmp = frame.copy()
+            # for rect in candidate_label_rects:
+            #     color = colors[count]
+            #     count+=1
+            #     draw = PIL.ImageDraw.Draw(tmp)
+            #     draw.rectangle(((rect[0], rect[1]), (rect[2], rect[3])), fill=None, outline=color)
+            # tmp.show()
+
+        newlist = []
+        for rect in candidate_label_rects:
+            newframe = frame.crop(rect)
+            # newframe.show()
+            matchid = read_match_id(newframe)
+            newlist.append((matchid, rect))
+
+        candidate_match_ids = newlist
+
+        # candidate_match_ids = \
+        #     ((read_match_id(frame.crop(rect)), rect) for rect in candidate_label_rects)
 
         match_id = None
         label_rect = None
@@ -196,16 +370,23 @@ class FRC2017VisionCore:
             if match_id is not None and len(match_id) > 0:
                 break
 
+        # If we found a match number, see if there is a timeout
         if match_id is not None:
-            timeout_dist = color_dist(mean_color(self._crop_rel(frame, label_rect, TIMEOUT_RECT)),
-                                      TIMEOUT_COLOR)
+            # frame.show()
+            cropped = self._crop_rel(frame, label_rect, TIMEOUT_RECT)
+            # cropped.show()
+            meancolor = mean_color(cropped)
+            timeout_dist = color_dist(meancolor, TIMEOUT_COLOR)
+            print('distance', timeout_dist)
             if timeout_dist < TIMEOUT_THRESHOLD:
                 print('timeout detected')
                 match_id = None
 
         match_info = {}
         if self._advanced_scraping and match_id is not None:
+            frame.show()
             left_color_img = self._crop_rel(frame, label_rect, LEFT_COLOR_RECT)
+            left_color_img.show()
             left_mean_color = mean_color(left_color_img)
             left_red_dist = color_dist(left_mean_color, RED_COLOR)
             left_blue_dist = color_dist(left_mean_color, BLUE_COLOR)
@@ -221,22 +402,11 @@ class FRC2017VisionCore:
             match_info['{}_score'.format(left_team)] = read_number(left_score_img)
             match_info['{}_score'.format(right_team)] = read_number(right_score_img)
 
-            match_info['{}_hangs'.format(left_team)] = \
-                read_number(self._crop_rel(frame, label_rect, LEFT_HANGS_RECT))
-            match_info['{}_rotors'.format(left_team)] = \
-                read_number(self._crop_rel(frame, label_rect, LEFT_ROTORS_RECT))
-            match_info['{}_kpa'.format(left_team)] = \
-                read_number(self._crop_rel(frame, label_rect, LEFT_KPA_RECT))
 
-            match_info['{}_hangs'.format(right_team)] = \
-                read_number(self._crop_rel(frame, label_rect, RIGHT_HANGS_RECT))
-            match_info['{}_rotors'.format(right_team)] = \
-                read_number(self._crop_rel(frame, label_rect, RIGHT_ROTORS_RECT))
-            match_info['{}_kpa'.format(right_team)] = \
-                read_number(self._crop_rel(frame, label_rect, RIGHT_KPA_RECT))
-
+            modeimg = self._crop_rel(frame, label_rect, MODE_DISTINGUISH_RECT)
             mode_distinguish_color = \
-                mean_color(self._crop_rel(frame, label_rect, MODE_DISTINGUISH_RECT))
+                mean_color(modeimg)
+            modeimg.show()
 
             first_portion_dist = color_dist(mode_distinguish_color, FIRST_PORTION_COLOR)
             first_portion = first_portion_dist < FIRST_PORTION_THRESHOLD
@@ -279,6 +449,7 @@ class FRC2017VisionCore:
                     match_info['match_time'] = match_time
 
         return (match_id, match_info)
+    """
 
     def _crop_rel(self, frame, origin_rect, rel_rect):
         ox1, oy1, ox2, oy2 = origin_rect
@@ -291,6 +462,8 @@ class FRC2017VisionCore:
 
         return frame.crop((x1, y1, x2, y2))
 
+    # Attempt to find match label rectangle
+    # Says something like: Qualification 1 of 74
     def _find_label_rect(self, frame):
         frame_crop = (0, 0, frame.width * FIRST_LOGO_SCAN_RATIO, frame.height)
         frame_array = numpy.array(frame.crop(frame_crop))
@@ -324,9 +497,9 @@ class FRC2017VisionCore:
         return None
 
 if __name__ == '__main__':
-    vision_core = FRC2017VisionCore(BASE_WIDTH, BASE_HEIGHT)
+    vision_core = VisionCore(BASE_WIDTH, BASE_HEIGHT)
 
-    frames_dir = os.path.join(SCRIPT_DIR, '../../samples/frc2017')
+    frames_dir = os.path.join(SCRIPT_DIR, '../../samples')
     frames_files = []
     if len(sys.argv) > 1:
         frames_files = sys.argv[1:]
@@ -334,6 +507,11 @@ if __name__ == '__main__':
         frames_files = sorted(os.listdir(frames_dir))
 
     for frame_file in frames_files:
+        if frame_file == ".DS_Store":
+            continue
+
+        print('Processing {}'.format(frame_file))
+
         frame_path = frame_file
         if not os.path.isfile(frame_path):
             frame_path = os.path.join(frames_dir, frame_file)
@@ -341,4 +519,5 @@ if __name__ == '__main__':
         frame = PIL.Image.open(frame_path)
         start_time = time.time()
         match_id, match_info = vision_core.process_frame(frame)
-        print('({}) {} = {}: {}'.format(time.time() - start_time, frame_file, match_id, match_info))
+        print('({:.2f}) {} = {}: {}'.format(time.time() - start_time, frame_file, match_id, match_info))
+        print()
