@@ -73,7 +73,9 @@ RIGHT_HANGS_RECT = (1160-FMS_BASE_X, 673-FMS_BASE_Y, 19+1160-FMS_BASE_X, 26+673-
 RIGHT_ROTORS_RECT = (1049-FMS_BASE_X, 672-FMS_BASE_Y, 21+1049-FMS_BASE_X, 27+672-FMS_BASE_Y)
 RIGHT_KPA_RECT = (917-FMS_BASE_X, 674-FMS_BASE_Y, 47+917-FMS_BASE_X, 27+674-FMS_BASE_Y)
 
-MATCH_TIME_RECT = (614-FMS_BASE_X, 606-FMS_BASE_Y, 52+614-FMS_BASE_X, 27+606-FMS_BASE_Y)
+# MATCH_TIME_RECT = (614-FMS_BASE_X, 606-FMS_BASE_Y, 52+614-FMS_BASE_X, 27+606-FMS_BASE_Y)
+# MATCH_TIME_RECT = (600, 612, 675, 650)
+MATCH_TIME_RECT = ((614, 611, 666, 650), 'game')
 MATCH_TIME_CONTRAST = 127
 MATCH_TIME_THRESHOLD = 72
 
@@ -211,6 +213,7 @@ class VisionCore:
         self._y_scale = video_height / BASE_HEIGHT
         self._scaled_label_rects = self.rescale_rects(MATCH_LABEL_RECTS)
         self._scaled_results_rects = self.rescale_rects(MATCH_RESULTS_RECTS)
+        self._scaled_time_rect = self.rescale_rects(MATCH_TIME_RECT)
 
         self._half_video_width = video_width / 2
         self._label_x2 = self._half_video_width - MATCH_LABEL_RIGHT_PADDING
@@ -226,12 +229,19 @@ class VisionCore:
 
     def rescale_rects(self, rects):
         ret = []
+        isList=True
+        if not isinstance(rects, list):
+            isList=False
+            rects = [rects]
+
         for (x1, y1, x2, y2), typ in rects:
             ret.append(((
                 x1 * self._x_scale, y1 * self._y_scale,
                 x2 * self._x_scale, y2 * self._y_scale
             ), typ))
-        return ret
+        if isList:
+            return ret
+        return ret[0]
 
     def _get_match_info(self, frame):
         def process(rect, typ):
@@ -269,31 +279,32 @@ class VisionCore:
         return ret
 
     def get_match_time(self, frame):
-        if self.label_rect is None:
-            return None
-        match_time_img = self._crop_rel(frame, self.label_rect, MATCH_TIME_RECT)
+
+        match_time_img = frame.crop(self._scaled_time_rect[0])#self._crop_rel(frame, self.label_rect, MATCH_TIME_RECT)
         # match_time_img.show()
+
+        match_time1 = read_number(match_time_img)
+        if match_time1 is not None:
+            return match_time1
 
         match_time_enhanced = \
             PIL.ImageEnhance.Contrast(match_time_img).enhance(MATCH_TIME_CONTRAST)
         # match_time_enhanced.show()
+        match_time2 = read_number(match_time_enhanced)
+        if match_time2 is not None:
+            return match_time2
 
         match_time_thresholded = \
             match_time_enhanced \
             .convert('L') \
             .point(lambda x: 0 if x < MATCH_TIME_THRESHOLD else 255, '1')
         # match_time_thresholded.show()
+        match_time3 = read_number(match_time_thresholded)
 
-        match_time = read_number(match_time_thresholded)
-        # print('first: ', match_time)
-        if match_time is None:
-            match_time = read_number(match_time_enhanced)
-            # print('second: ', match_time)
-        if match_time is None:
-            match_time = read_number(match_time_img)
-            # print('third: ', match_time)
+        if match_time3 is not None:
+            return match_time3
 
-        return match_time
+        return None
 
     def hasMatchStarted(self, frame):
         t = self.getMatchTime(frame)
@@ -516,6 +527,8 @@ class VisionCore:
         y1 = ry1 * self._y_scale + oy1
         x2 = rx2 * self._x_scale + self._half_video_width
         y2 = ry2 * self._y_scale + oy1
+
+        print('', rel_rect, (x1, y1, x2, y2))
 
         return frame.crop((x1, y1, x2, y2))
 

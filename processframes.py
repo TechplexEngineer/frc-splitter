@@ -66,9 +66,14 @@ def dowork(file):
 
 	if info['type'] == "game":
 		info['time'] = vc.get_match_time(frame)
+	if info['type'] == "outside":
+		info['type'] = vc.get_frame_type(frame)
+
+	del info['rect']
 	print(info)
 
 	print('frame {} took {:2f}'.format(file, time.time() - start))
+	print()
 	# typ = vc.get_frame_type(frame)
 
 	# count += 1
@@ -95,6 +100,9 @@ def main(framedir, usemulti):
 		print(ret)
 		print('all {} frames took {:2f}'.format(len(test.items()), time.time() - start))
 	else:
+		framestart = 522
+		frameend   = 845
+
 		start = time.time()
 		setup(framedir)
 		for name, file in test.items():
