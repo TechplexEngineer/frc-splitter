@@ -141,7 +141,7 @@ class MatchRecorderStreamConnector(streamconnector.StreamConnector):
         self._upload_in_background(ready_path)
 
     def _upload_in_background(self, ready_path):
-        console.log('upload in bg {}'.format(ready_path));
+        print('upload in bg {}'.format(ready_path));
         # multiprocessing.Process(
         #         target=videohandler.upload_to_streamable_and_post_to_twitter,
         #         args=(ready_path.split('---')[1], ready_path, self._twitter_user)

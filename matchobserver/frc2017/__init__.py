@@ -40,10 +40,14 @@ BASE_WIDTH = 1280
 BASE_HEIGHT = 720
 
 MATCH_LABEL_RECTS = [
-    ((160, 555, 625, 610), 'game'), #second arg is type
-    ((75,  53,  625, 110), 'outside')
+    ((160, 560, 625, 610), 'game'),
+    ((75,  53,  625, 110), 'outside'),
 ]
-FRAME_RESULTS_RECTS = [(640, 51, 1030, 116)]
+MATCH_RESULTS_RECTS = [
+    # ((640, 51, 1030, 116), 'results'),
+    # ((825, 51, 1201, 110), 'preview'),
+    ((640, 51, 1201, 110), 'both')
+]
 
 FMS_BASE_X = BASE_WIDTH / 2
 FMS_BASE_Y = 555
@@ -122,32 +126,32 @@ def np(r):
 
 # Used to match against error prone OCR text
 MATCH_ID_FORMATS = [
-    (re.compile(np(r'^Qualif[^@]+([@\s]+)of')), 'Qualification Match'),
+    (re.compile(np(r'^Qualif[^@]+([@\s]+)of'), re.M), 'Qualification Match'),
 
-    (re.compile(np(r'^Quart[^T]+Tieb[^@]+([@\s]+)$')), 'Quarterfinal Tiebreaker'),
-    (re.compile(np(r'^Quart[^@]+([@\s]+)of')), 'Quarterfinal Match'),
-    (re.compile(np(r'^Quart[^@]+([@\s]+)$')), 'Quarterfinal Match'),
+    (re.compile(np(r'^Quart[^T]+Tieb[^@]+([@\s]+)$'), re.M), 'Quarterfinal Tiebreaker'),
+    (re.compile(np(r'^Quart[^@]+([@\s]+)of'), re.M), 'Quarterfinal Match'),
+    (re.compile(np(r'^Quart[^@]+([@\s]+)$'), re.M), 'Quarterfinal Match'),
 
-    (re.compile(np(r'^Semi[^T]+Tieb[^@]+([@\s]+)')), 'Semifinal Tiebreaker'),
-    (re.compile(np(r'^Semi[^@]+([@\s]+)of')), 'Semifinal Match'),
-    (re.compile(np(r'^Semi[^@]+([@\s]+)$')), 'Semifinal Match'),
+    (re.compile(np(r'^Semi[^T]+Tieb[^@]+([@\s]+)'), re.M), 'Semifinal Tiebreaker'),
+    (re.compile(np(r'^Semi[^@]+([@\s]+)of'), re.M), 'Semifinal Match'),
+    (re.compile(np(r'^Semi[^@]+([@\s]+)$'), re.M), 'Semifinal Match'),
 
-    (re.compile(np(r'^Fin[^T]+Tieb[^@]+([@\s]+)')), 'Final Tiebreaker'),
-    (re.compile(np(r'^Fin[^@]+([@\s]+)of')), 'Final Match'),
-    (re.compile(np(r'^Fin[^@]+([@\s]+)$')), 'Final Match'),
+    (re.compile(np(r'^Fin[^T]+Tieb[^@]+([@\s]+)'), re.M), 'Final Tiebreaker'),
+    (re.compile(np(r'^Fin[^@]+([@\s]+)of'), re.M), 'Final Match'),
+    (re.compile(np(r'^Fin[^@]+([@\s]+)$'), re.M), 'Final Match'),
 
-    (re.compile(np(r'^Practice[^@]+([@\s]+)of')), 'Practice Match'),
+    (re.compile(np(r'^Practice[^@]+([@\s]+)of'), re.M), 'Practice Match'),
 
-    (re.compile(np(r'^Einst[^F]+Fin[^T]+Tieb[^@]+([@\s]+)')), 'Final Tiebreaker'),
-    (re.compile(np(r'^Einst[^F]+Fin[^@]+([@\s]+)of')), 'Final Match'),
-    (re.compile(np(r'^Einst[^F]+Fin[^@]+([@\s]+)$')), 'Final Match'),
+    (re.compile(np(r'^Einst[^F]+Fin[^T]+Tieb[^@]+([@\s]+)'), re.M), 'Final Tiebreaker'),
+    (re.compile(np(r'^Einst[^F]+Fin[^@]+([@\s]+)of'), re.M), 'Final Match'),
+    (re.compile(np(r'^Einst[^F]+Fin[^@]+([@\s]+)$'), re.M), 'Final Match'),
 
-    (re.compile(np(r'^Einst[^T]+Tieb[^@]+([@\s]+)')), 'Playoff Tiebreaker'),
-    (re.compile(np(r'^Einst[^@]+([@\s]+)of')), 'Playoff Match'),
-    (re.compile(np(r'^Einst[^@]+([@\s]+)$')), 'Playoff Match')
+    (re.compile(np(r'^Einst[^T]+Tieb[^@]+([@\s]+)'), re.M), 'Playoff Tiebreaker'),
+    (re.compile(np(r'^Einst[^@]+([@\s]+)of'), re.M), 'Playoff Match'),
+    (re.compile(np(r'^Einst[^@]+([@\s]+)$'), re.M), 'Playoff Match')
 ]
 
-WHITESPACE_RE = re.compile(r'\s+')
+WHITESPACE_RE = re.compile(r'\s+', )
 NOT_DIGIT_RE = re.compile(r'[^0-9]')
 
 # Turns out OCR (tesseract) has some common errors. Since we expect text to
@@ -165,7 +169,7 @@ def interpret_as_number(text):
         return None
     return int(text)
 
-# Using the number config
+# Image to number using tesseract the number config
 def read_number(img):
     out = pytesseract.image_to_string(img, config=NUMBER_TESSERACT_CONFIG)
     return interpret_as_number(out)
@@ -174,10 +178,10 @@ def read_number(img):
 # any of the MATCH_ID_FORMATS to determine what type of match.
 def read_match_id(cropped_frame):
     text = pytesseract.image_to_string(cropped_frame)
-    # print('Tesseract: ', text)
+    # print('txt: "{}"'.format(text))
 
     for regex, match_type in MATCH_ID_FORMATS:
-        match = regex.match(text.strip())
+        match = regex.search(text.strip())
         # print('match ', match is not None and match.groups())
         if match:
             match_number = fix_digits(match.group(1))
@@ -195,86 +199,76 @@ def mean_color(img):
 def color_dist(color1, color2):
     return scipy.spatial.distance.euclidean(color1, color2)
 
+
+
 class VisionCore:
     def __init__(self, video_width, video_height):
 
-        # quicker than scaling the image?
+        #@bb quicker than scaling the image?
 
         # If the frame is not BASE_WIDTH by BASE_HEIGHT we re-scale our coords
         self._x_scale = video_width / BASE_WIDTH
         self._y_scale = video_height / BASE_HEIGHT
-        self._scaled_label_rects = [(
-            (
-                x1 * self._x_scale, y1 * self._y_scale,
-                x2 * self._x_scale, y2 * self._y_scale),
-            typ)
-            for (x1, y1, x2, y2), typ in MATCH_LABEL_RECTS
-        ]
-
-        self._scaled_results_rects = [(
-            x1 * self._x_scale, y1 * self._y_scale,
-            x2 * self._x_scale, y2 * self._y_scale)
-            for x1, y1, x2, y2 in FRAME_RESULTS_RECTS
-        ]
+        self._scaled_label_rects = self.rescale_rects(MATCH_LABEL_RECTS)
+        self._scaled_results_rects = self.rescale_rects(MATCH_RESULTS_RECTS)
 
         self._half_video_width = video_width / 2
         self._label_x2 = self._half_video_width - MATCH_LABEL_RIGHT_PADDING
 
-        template = cv2.cvtColor(cv2.imread(FIRST_LOGO_TEMPLATE_PATH), cv2.COLOR_BGR2RGB)
+        # setup to be able to search for FIRST Logo location
+        logo = FIRST_LOGO_TEMPLATE_PATH
+        template = cv2.cvtColor(cv2.imread(logo), cv2.COLOR_BGR2RGB)
         self._template_height, self._template_width = template.shape[:2]
         self._feature_detector = cv2.xfeatures2d.SURF_create()
         self._flann_matcher = cv2.FlannBasedMatcher(*FIRST_LOGO_FLANN_PARAMS)
         self._template_keypoints, self._template_descriptors = \
             self._feature_detector.detectAndCompute(template, None)
 
+    def rescale_rects(self, rects):
+        ret = []
+        for (x1, y1, x2, y2), typ in rects:
+            ret.append(((
+                x1 * self._x_scale, y1 * self._y_scale,
+                x2 * self._x_scale, y2 * self._y_scale
+            ), typ))
+        return ret
 
-    def first(self, frame):
-        # # Search the left quarter of the image for the first logo
-        # found_rect = self._find_label_rect(frame)
-        # if found_rect is not None:
-        #     self._scaled_label_rects = [(found_rect, 'game')] + self._scaled_label_rects
-
-        colors=['red','green','blue']
-        count=0
-        tmp = frame.copy()
-        for rect, typ in self._scaled_label_rects:
-            color = colors[count]
-            count+=1
-            draw = PIL.ImageDraw.Draw(tmp)
-            # print(rect[0])
-            draw.rectangle(((rect[0], rect[1]), (rect[2], rect[3])), fill=None, outline=color)
-        tmp.show()
-
-        # Grab a section of the frame for each found rect and use tesseract
-        # to extract the match id. Stop as soon as we get some matching text
-        for rect, typ in self._scaled_label_rects:
+    def _get_match_info(self, frame):
+        def process(rect, typ):
             newframe = frame.crop(rect)
             # newframe.show()
             match_type, match_number = read_match_id(newframe)
+            # print('match', match_type, match_number)
             if match_type is not None \
                     and len(match_type) > 0 \
                     and match_number is not None \
                     and len(match_number) > 0:
-                self.match_type = match_type
-                self.match_number = match_number
-                self.match_status = typ # (One of: outside, game)
-                if (self.match_status == 'game'):
-                    self.label_rect = rect
-                else:
-                    self.label_rect = None
-                break
-        if match_type is None \
-                or len(match_type) <= 0 \
-                or match_number is None \
-                or len(match_number) <= 0:
-            print('unable to get match information, will try with next frame')
-            self.match_type = None
-            self.match_number = None
-            self.match_status = None
-            self.label_rect = None
+                return {
+                    'match_type':   match_type,
+                    'match_number': match_number,
+                    'rect':         rect,
+                    'type':         typ
+                }
+            return None
 
+        # Search known locations
+        for rect, typ in self._scaled_label_rects:
+            ret = process(rect, typ)
+            if ret is not None:
+                return ret
+        # if not found use _find_label_rect
+        found_rect = self._find_label_rect(frame)
+        return process(found_rect, "game")
 
-    def getMatchTime(self, frame):
+    def get_match_info(self, frame):
+        ret = self._get_match_info(frame)
+
+        if ret['type'] == "game":
+            self.label_rect = ret['rect']
+
+        return ret
+
+    def get_match_time(self, frame):
         if self.label_rect is None:
             return None
         match_time_img = self._crop_rel(frame, self.label_rect, MATCH_TIME_RECT)
@@ -318,17 +312,80 @@ class VisionCore:
             }
         return None
 
-    def hasMatchResults(self, frame):
+    # determine if preview or results frame
+    def get_frame_type(self, frame):
         # Check if the upper right corner says results
 
-        for rect in self._scaled_results_rects:
+        for rect, typ in self._scaled_results_rects:
             newframe = frame.crop(rect)
             # newframe.show()
             text = pytesseract.image_to_string(newframe)
+            # print('found', text)
             match = re.match(r'Match[^R]+Res', text, re.I)
             if match:
-                return True
-        return False
+                return 'results'
+            match = re.match(r'Match[^P]+Pre', text, re.I)
+            if match:
+                return 'preview'
+        return None
+
+    def first(self, frame):
+        # # Search the left quarter of the image for the first logo
+        # found_rect = self._find_label_rect(frame)
+        # if found_rect is not None:
+        #     self._scaled_label_rects = [(found_rect, 'game')] + self._scaled_label_rects
+
+        # colors=['red','green','blue']
+        # count=0
+        # tmp = frame.copy()
+        # for rect, typ in self._scaled_label_rects:
+        #     color = colors[count]
+        #     count+=1
+        #     draw = PIL.ImageDraw.Draw(tmp)
+        #     # print(rect[0])
+        #     draw.rectangle(((rect[0], rect[1]), (rect[2], rect[3])), fill=None, outline=color)
+        # tmp.show()
+
+        # Grab a section of the frame for each found rect and use tesseract
+        # to extract the match id. Stop as soon as we get some matching text
+        for rect, typ in self._scaled_label_rects:
+            newframe = frame.crop(rect)
+            # newframe.show()
+            match_type, match_number = read_match_id(newframe)
+            if match_type is not None \
+                    and len(match_type) > 0 \
+                    and match_number is not None \
+                    and len(match_number) > 0:
+
+                self.match_type = match_type
+                self.match_number = match_number
+                self.match_status = typ # (One of: outside, game)
+                if (self.match_status == 'game'):
+                    self.label_rect = rect
+                else:
+                    self.label_rect = None
+                break
+
+        if self.match_type is None:
+            # Search the left quarter of the image for the first logo
+            found_rect = self._find_label_rect(frame)
+            if found_rect is not None:
+                (found_rect, 'game')
+
+
+
+        if match_type is None \
+                or len(match_type) <= 0 \
+                or match_number is None \
+                or len(match_number) <= 0:
+            print('unable to get match information, will try with next frame')
+            self.match_type = None
+            self.match_number = None
+            self.match_status = None
+            self.label_rect = None
+
+
+    
 
 
     """

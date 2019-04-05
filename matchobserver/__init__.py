@@ -169,6 +169,6 @@ class MatchObserver:
 
     def get_latest(self):
         new_match_id = None
-        while not self._match_id_queue.empty():
+        while not self._match_id_queue.empty(): # why is there a while? It seems if there were more than one in the queue it would loose the old ones
             new_match_id = self._match_id_queue.get_nowait()
         return new_match_id
