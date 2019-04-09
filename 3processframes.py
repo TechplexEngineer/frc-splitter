@@ -1,4 +1,5 @@
 import os
+import sys
 import click
 import PIL
 import PIL.ImageEnhance
@@ -27,7 +28,7 @@ test = {
 }
 
 def extract_digits(string):
-	return ''.join([s for s in string if s.isdigit()])
+	return int(''.join([s for s in string if s.isdigit()]))
 
 MATCH_DEFAULTS = {
 	'startframe': -1,
@@ -39,16 +40,18 @@ MATCH_DEFAULTS = {
 
 
 vc = None
-framedir = None
-def setup(_framedir):
+frames = []
+framedir = ""
+def setup(_framedir, _frames):
 	global vc
+	global frames
 	global framedir
+	frames = _frames
 	framedir = _framedir
 
-	files = os.listdir(framedir)
 
 	# Assume all frames are the same size
-	frame = PIL.Image.open(os.path.join(framedir, files[0]))
+	frame = PIL.Image.open(os.path.join(framedir, frames[0]))
 	width, height = frame.size
 	vc = frc2017.VisionCore(width, height)
 
@@ -56,24 +59,33 @@ def setup(_framedir):
 count = 0
 def dowork(file):
 	global count
-	# print('***** {} {}'.format(name, file))
-	# framestart = time.time()
+	info = {}
+	try:
+		start = time.time()
+		frame = PIL.Image.open(os.path.join(framedir, file)) #@todo load only portion of frame
+		info = vc.get_match_info(frame)
+		if info is None:
+			info = {}
 
-	# print('bb ', framedir, file)
-	start = time.time()
-	frame = PIL.Image.open(os.path.join(framedir, file)) #@todo load only portion of frame
-	info = vc.get_match_info(frame)
+		info['frame'] = extract_digits(file)
 
-	if info['type'] == "game":
-		info['time'] = vc.get_match_time(frame)
-	if info['type'] == "outside":
-		info['type'] = vc.get_frame_type(frame)
+		if info is not None and 'type' in info:
+			if info['type'] == "game":
+				info['time'] = vc.get_match_time(frame)
+			if info['type'] == "outside":
+				info['type'] = vc.get_frame_type(frame)
 
-	del info['rect']
-	print(info)
+		if 'rect' in info:
+			del info['rect']
 
-	print('frame {} took {:2f}'.format(file, time.time() - start))
-	print()
+
+		info['_duration'] = time.time() - start
+	except Exception as e:
+		print('error processing frame {}'.format(extract_digits(file)), e)
+	finally:
+		return info
+
+
 	# typ = vc.get_frame_type(frame)
 
 	# count += 1
@@ -85,33 +97,52 @@ def dowork(file):
 	# return (match_type, match_number)
 	return None
 
+
 @click.command(help='Iterate through all frames')
 @click.argument('framedir')
 @click.option('--usemulti', default=False, help='Whether or not use multiprocessing')
-def main(framedir, usemulti):
+@click.option('--chunksize', default=10, help='')
+@click.option('--startframe', default=0, help='')
+@click.option('--endframe', default=sys.maxsize, help='')
+def main(framedir, usemulti, chunksize, startframe, endframe):
 
+	# startframe = 522
+	# endframe   = 845
+
+	files = []
+	# for name, file in test.items():
+	allfiles = os.listdir(framedir)
+	for file in allfiles:
+		# print(file, file == ".DS_Store")
+		if file == ".DS_Store":
+			continue
+		# return
+		framenum = extract_digits(file)
+		if startframe <= framenum <= endframe:
+			files.append(file)
+
+	print('there are {} frames'.format(len(files)))
 
 	if usemulti:
-		setupargs = [framedir]
+		setupargs = [framedir, files]
 		multiprocessing.set_start_method('spawn') # this is needed for CV to work on osx
-		start = time.time()
+		# start = time.time()
 		p = Pool(processes=(os.cpu_count()-1), initializer=setup, initargs=setupargs)
-		ret = p.map(dowork, test.values())
+		ret = p.map(dowork, files, chunksize=chunksize)
 		print(ret)
-		print('all {} frames took {:2f}'.format(len(test.items()), time.time() - start))
+		# print('all {} frames took {:2f}'.format(len(files), time.time() - start))
 	else:
-		framestart = 522
-		frameend   = 845
-
-		start = time.time()
-		setup(framedir)
-		for name, file in test.items():
+		# start = time.time()
+		setup(framedir, files)
+		for file in files:
 			dowork(file)
-		print('all {} frames took {:2f}'.format(len(test.items()), time.time() - start))
+
+		# print('all {} frames took {:2f}'.format(count, time.time() - start))
 		# 7 frames in for loop takes ~4.8/5
 
 
-
+s = "test"
+s.replace
 
 
 

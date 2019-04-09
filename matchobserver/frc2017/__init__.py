@@ -273,7 +273,7 @@ class VisionCore:
     def get_match_info(self, frame):
         ret = self._get_match_info(frame)
 
-        if ret['type'] == "game":
+        if ret is not None and ret['type'] == "game":
             self.label_rect = ret['rect']
 
         return ret
@@ -284,15 +284,15 @@ class VisionCore:
         # match_time_img.show()
 
         match_time1 = read_number(match_time_img)
-        if match_time1 is not None:
-            return match_time1
+        # if match_time1 is not None:
+        #     return match_time1
 
         match_time_enhanced = \
             PIL.ImageEnhance.Contrast(match_time_img).enhance(MATCH_TIME_CONTRAST)
         # match_time_enhanced.show()
         match_time2 = read_number(match_time_enhanced)
-        if match_time2 is not None:
-            return match_time2
+        # if match_time2 is not None:
+        #     return match_time2
 
         match_time_thresholded = \
             match_time_enhanced \
@@ -301,10 +301,10 @@ class VisionCore:
         # match_time_thresholded.show()
         match_time3 = read_number(match_time_thresholded)
 
-        if match_time3 is not None:
-            return match_time3
+        # if match_time3 is not None:
+        #     return match_time3
 
-        return None
+        return (match_time1, match_time2, match_time3)
 
     def hasMatchStarted(self, frame):
         t = self.getMatchTime(frame)
