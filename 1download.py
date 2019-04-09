@@ -1,24 +1,22 @@
 import click
-import twitch
 import youtube_dl
 
 
 @click.command(
-    help='Pass the ID (Twitch ID to download) and a FILENAME (Output file)')
-@click.argument('id')
+    help='Pass the URL (to download) and a FILENAME (Output file)')
+@click.argument('url')
 @click.argument('filename')
 
-def download(id, filename):
+def download(url, filename):
     print("Downloading " + filename)
-    twitch_client = twitch.TwitchClient(client_id='a57grsx9fi8ripztxn8zbxhnvek4cp')
-    vodinf = twitch_client.videos.get_by_id(id)
     ydl_opts = {
         'format': 'best',
         'fixup': 'never',
         'outtmpl': filename
     }
+    # https://github.com/ytdl-org/youtube-dl/blob/master/README.md#embedding-youtube-dl
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([vodinf.get('url')])
+        ydl.download([url])
     return vodinf.get('created_at').timestamp()
 
 if __name__ == '__main__':
