@@ -26,12 +26,12 @@ A rough outline of the code in this repository:
 
 # For anyone interested in contributing:
 Here are some [sample frames](https://github.com/TechplexEngineer/frc-splitter/files/3249665/interesting.zip)
-frame0522.jpg shows a match preview
-frame0653.jpg is where the match actually starts
-frame0667.jpg is where teleop starts
-frame0789.jpg is when there are 14 seconds left in teleop
-frame0837.jpg is the end of the match
-frame0845.jpg is when the results are posted.
+- frame0522.jpg shows a match preview
+- frame0653.jpg is where the match actually starts
+- frame0667.jpg is where teleop starts
+- frame0789.jpg is when there are 14 seconds left in teleop
+- frame0837.jpg is the end of the match
+- frame0845.jpg is when the results are posted.
 
 ## Many of the needed pieces are here some remaining work includes:
 - When to process frames vs when to seek (for performance)
