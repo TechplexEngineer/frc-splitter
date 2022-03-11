@@ -1,4 +1,4 @@
 Click==7.0
-Pillow==6.0.0
+Pillow==9.0.1
 twitch-python==0.0.5
 youtube-dl==2019.4.7
